@@ -1,8 +1,10 @@
-package day01
+package Day01
 
 import println
 import readInput
 import kotlin.system.measureNanoTime
+
+private const val FOLDER = "Day01"
 
 fun main() {
     fun part1(input: List<String>): Int {
@@ -47,10 +49,10 @@ fun main() {
         return calibrationValues.sum()
     }
 
-    check(part1(readInput("day01/Day01_test")) == 142)
-    check(part2(readInput("day01/Day01_test2")) == 281)
+    check(part1(readInput("${FOLDER}/test")) == 142)
+    check(part2(readInput("${FOLDER}/test2")) == 281)
 
-    val input = readInput("day01/Day01")
+    val input = readInput("${FOLDER}/input")
     val part1Time = measureNanoTime {
         part1(input).println()
     }
