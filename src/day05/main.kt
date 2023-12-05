@@ -7,40 +7,97 @@ private const val FOLDER = "day05"
 
 fun main() {
 
-    data class Factory(val map: Map<LongRange, Long>) {
-        operator fun get(input: Long): Long {
-            val rngEntry = map.entries.firstOrNull { input in it.key } ?: return input
-            return rngEntry.value + (input - rngEntry.key.first)
+    data class Range(val start: Long, val end: Long) {
+        operator fun contains(other: Range): Boolean {
+            return this.start <= other.start && this.end >= other.end
         }
 
-        operator fun get(input: List<LongRange>): List<LongRange> {
-            val outputRanges = mutableListOf<LongRange>()
-            input.forEach { range ->
-                map.entries.firstOrNull {range.first in it.key && range.last in it.key }?.let {
-                    outputRanges.add(get(range.first)..get(range.last))
-                    return@forEach
+        fun isIntersect(other: Range): Boolean {
+            return this.start <= other.end && this.end >= other.start
+        }
+
+        fun intersect(other: Range): Range {
+            return Range(
+                start = maxOf(this.start, other.start),
+                end = minOf(this.end, other.end)
+            )
+        }
+    }
+
+    data class Aabb(val value: Long, val isStart: Boolean)
+
+    fun merge(ranges1: List<Range>, ranges2: List<Range>, revRange2: Boolean = false, depthCriteria: Int = 1): List<Range> {
+        val result = mutableListOf<Range>()
+        val aabbLists = ranges1.map { Aabb(it.start, true) } +
+                ranges1.map { Aabb(it.end + 1, false) } +
+                ranges2.map { Aabb(it.start, !revRange2) } +
+                ranges2.map { Aabb(it.end + 1, revRange2) }
+        val sortedAabbPtList = aabbLists.sortedBy { it.value }
+        var start: Long? = null
+        var depth = 0
+        for (aabb in sortedAabbPtList) {
+            depth += if (aabb.isStart) 1 else -1
+            if (depth >= depthCriteria && start == null) {
+                start = aabb.value
+            } else if (depth < depthCriteria && start != null) {
+                if (start < aabb.value) {
+                    result.add(Range(start, aabb.value - 1))
                 }
-                map.entries.filter { range.first in it.key }.maxByOrNull { it.key.last }?.let {
-                    outputRanges.add(get(it.key.first)..get(range.first - 1))
-                    outputRanges.add(get(range.first)..get(it.key.last))
-                    return@forEach
-                }
-                map.entries.filter { range.last in it.key }.minByOrNull { it.key.first }?.let {
-                    outputRanges.add(get(it.key.first)..get(range.last))
-                    outputRanges.add(get(range.last + 1)..get(it.key.last))
-                    return@forEach
+                start = null
+            }
+        }
+        return result
+    }
+
+    fun List<Range>.cutout(other: List<Range>): List<Range> {
+        return merge(this, other, revRange2 = true)
+    }
+
+    fun List<Range>.union(other: List<Range>): List<Range> {
+        return merge(this, other)
+    }
+
+    fun List<Range>.intersect(other: List<Range>): List<Range> {
+        return merge(this, other, depthCriteria = 2)
+    }
+
+    data class Factory(private val rangePairs: List<Pair<Range, Long>>) {
+        private val opRanges = rangePairs.map { it.first }
+
+        fun operate(input: List<Range>): List<Range> {
+            val noOpRanges = input.cutout(opRanges)
+            val intersectRanges = input.cutout(noOpRanges)
+
+            val outputRanges = mutableListOf<Range>()
+            intersectRanges.forEach { intersectRange ->
+                rangePairs.filter { intersectRange.isIntersect(it.first) }.forEach { (iptRange, optStart) ->
+                    val partialIntersectRange = intersectRange.intersect(iptRange)
+                    val opRange = Range(
+                        start = partialIntersectRange.start + optStart - iptRange.start,
+                        end = partialIntersectRange.end + optStart - iptRange.start
+                    )
+                    outputRanges.add(opRange)
                 }
             }
+            return outputRanges.union(noOpRanges)
         }
     }
 
     fun getFactory(lines: List<String>): Factory {
-        val productionMap = mutableMapOf<LongRange, Long>()
+        val rangePairList = mutableListOf<Pair<Range, Long>>()
         for (line in lines) {
             val (dst, src, cnt) = line.split(" ")
-            productionMap[src.toLong()..<(src.toLong() + cnt.toLong())] = dst.toLong()
+            rangePairList.add(
+                Pair(
+                    Range(
+                        start = src.toLong(),
+                        end = src.toLong() + cnt.toLong() - 1
+                    ),
+                    dst.toLong()
+                )
+            )
         }
-        return Factory(productionMap)
+        return Factory(rangePairList)
     }
 
     fun getFactories(input: List<String>): List<Factory> {
@@ -70,27 +127,37 @@ fun main() {
         val numbers = mutableListOf<Long>()
 
         seeds.forEach { seed ->
-            var number = seed
-            factories.forEach { productionMap ->
-                number = productionMap[number]
+            var seedRanges = listOf(Range(seed, seed))
+            factories.forEach { factory ->
+                seedRanges = factory.operate(seedRanges)
             }
-            numbers.add(number)
+            numbers.add(seedRanges.first().start)
         }
 
         return numbers.min()
     }
 
     fun part2(input: List<String>): Long {
-        val seeds = "\\d+".toRegex().findAll(input.first()).map { it.value.toLong() }.toList()
+        val seedExpressions = "\\d+".toRegex().findAll(input.first()).map { it.value.toLong() }.toList()
+        val seedRangeList = seedExpressions.chunked(2).map { Range(it[0], it[0] + it[1] - 1) }
 
         val factories = getFactories(input)
 
-        val numbers = mutableListOf<Long>()
-        return 1
+        val outputRanges = mutableListOf<Range>()
+
+        seedRangeList.forEach { seedRange ->
+            var seedRanges = listOf(seedRange)
+            factories.forEach { factory ->
+                seedRanges = factory.operate(seedRanges)
+            }
+            outputRanges.addAll(seedRanges)
+        }
+
+        return outputRanges.minOf { it.start }
     }
 
     check(part1(readInput("$FOLDER/test")) == 35L)
-    check(part2(readInput("$FOLDER/test")) == 1L)
+    check(part2(readInput("$FOLDER/test")) == 46L)
 
     val input = readInput("$FOLDER/input")
     val part1Result: Long
