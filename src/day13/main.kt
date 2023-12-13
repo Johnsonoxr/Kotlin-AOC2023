@@ -10,13 +10,6 @@ private const val FOLDER = "day13"
 fun main() {
     fun part1(input: List<String>): Int {
 
-        fun String.toHash(): Long {
-            if (length > 64) {
-                throw IllegalArgumentException("Row is too long")
-            }
-            return mapIndexed { index, c -> if (c == '#') 2.0.pow(index).toLong() else 0L }.sum()
-        }
-
         val graphs = mutableListOf<MutableList<String>>(mutableListOf())
         input.forEach { line ->
             if (line.isBlank()) {
@@ -30,7 +23,7 @@ fun main() {
         var columnScore = 0
         graphs.forEach { graph ->
             val rows = graph
-            for (i in 1..<rows.lastIndex) {
+            for (i in 1..<rows.size) {
                 if (rows.subList(0, i).reversed().zip(rows.subList(i, rows.size)).all { (left, right) -> left == right }) {
                     rowScore += i
                     break
@@ -38,7 +31,7 @@ fun main() {
             }
 
             val columns = graph[0].indices.map { index -> graph.map { it[index] }.joinToString("") }
-            for (i in 1..<columns.lastIndex) {
+            for (i in 1..<columns.size) {
                 if (columns.subList(0, i).reversed().zip(columns.subList(i, columns.size)).all { (left, right) -> left == right }) {
                     columnScore += i
                     break
@@ -52,11 +45,42 @@ fun main() {
     }
 
     fun part2(input: List<String>): Int {
-        return 1
+        val graphs = mutableListOf<MutableList<String>>(mutableListOf())
+        input.forEach { line ->
+            if (line.isBlank()) {
+                graphs.add(mutableListOf())
+            } else {
+                graphs.last().add(line)
+            }
+        }
+
+        var rowScore = 0
+        var columnScore = 0
+        graphs.forEach { graph ->
+            val rows = graph
+            for (i in 1..<rows.size) {
+                if (rows.subList(0, i).reversed().zip(rows.subList(i, rows.size)).map { (left, right) -> if (left == right) 0 else 1 }.sum() <= 1) {
+                    rowScore += i
+                    break
+                }
+            }
+
+            val columns = graph[0].indices.map { index -> graph.map { it[index] }.joinToString("") }
+            for (i in 1..<columns.size) {
+                if (columns.subList(0, i).reversed().zip(columns.subList(i, columns.size)).map { (left, right) -> if (left == right) 0 else 1 }.sum() <= 1) {
+                    columnScore += i
+                    break
+                }
+            }
+        }
+
+        "Row score: $rowScore, column score: $columnScore".println()
+
+        return (rowScore * 100 + columnScore)
     }
 
     check(part1(readInput("$FOLDER/test")) == 405)
-    check(part2(readInput("$FOLDER/test")) == 1)
+    check(part2(readInput("$FOLDER/test")) == 400)
 
     val input = readInput("$FOLDER/input")
     val part1Result: Int
