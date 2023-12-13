@@ -21,18 +21,19 @@ fun main() {
 
         var rowScore = 0
         var columnScore = 0
-        graphs.forEach { graph ->
-            val rows = graph
+        graphs.forEach { rows ->
             for (i in 1..<rows.size) {
-                if (rows.subList(0, i).reversed().zip(rows.subList(i, rows.size)).all { (left, right) -> left == right }) {
+                val mirroredPairList = rows.subList(0, i).reversed().zip(rows.subList(i, rows.size))
+                if (mirroredPairList.all { (left, right) -> left == right }) {
                     rowScore += i
                     break
                 }
             }
 
-            val columns = graph[0].indices.map { index -> graph.map { it[index] }.joinToString("") }
+            val columns = rows[0].indices.map { index -> rows.map { it[index] }.joinToString("") }
             for (i in 1..<columns.size) {
-                if (columns.subList(0, i).reversed().zip(columns.subList(i, columns.size)).all { (left, right) -> left == right }) {
+                val mirroredPairList = columns.subList(0, i).reversed().zip(columns.subList(i, columns.size))
+                if (mirroredPairList.all { (left, right) -> left == right }) {
                     columnScore += i
                     break
                 }
@@ -56,18 +57,25 @@ fun main() {
 
         var rowScore = 0
         var columnScore = 0
-        graphs.forEach { graph ->
-            val rows = graph
+        graphs.forEach { rows ->
+            var mirrorFound = false
             for (i in 1..<rows.size) {
-                if (rows.subList(0, i).reversed().zip(rows.subList(i, rows.size)).map { (left, right) -> if (left == right) 0 else 1 }.sum() <= 1) {
+                val mirroredPairList = rows.subList(0, i).reversed().zip(rows.subList(i, rows.size))
+                if (mirroredPairList.sumOf { (l1, l2) -> l1.zip(l2).sumOf { (c1, c2) -> if (c1 != c2) 1L else 0L } } == 1L) {
                     rowScore += i
+                    mirrorFound = true
                     break
                 }
             }
 
-            val columns = graph[0].indices.map { index -> graph.map { it[index] }.joinToString("") }
+            if (mirrorFound) {
+                return@forEach
+            }
+
+            val columns = rows[0].indices.map { index -> rows.map { it[index] }.joinToString("") }
             for (i in 1..<columns.size) {
-                if (columns.subList(0, i).reversed().zip(columns.subList(i, columns.size)).map { (left, right) -> if (left == right) 0 else 1 }.sum() <= 1) {
+                val mirroredPairList = columns.subList(0, i).reversed().zip(columns.subList(i, columns.size))
+                if (mirroredPairList.sumOf { (l1, l2) -> l1.zip(l2).sumOf { (c1, c2) -> if (c1 != c2) 1L else 0L } } == 1L) {
                     columnScore += i
                     break
                 }
