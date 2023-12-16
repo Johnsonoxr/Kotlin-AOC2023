@@ -74,15 +74,12 @@ class TwoDimenGraph<T>(graph: Collection<T>, val stride: Int) {
 
 
 fun main() {
-    fun part1(input: List<String>): Int {
+    data class Beam(val position: TwoDimenGraph<Char>.Position, val direction: String)
 
-        val beams = mutableMapOf<TwoDimenGraph<Char>.Position, MutableSet<String>>()
+    fun solve(graph: TwoDimenGraph<Char>, startBeam: Beam): Map<TwoDimenGraph<Char>.Position, Set<String>> {
+        val uncheckedBeams = mutableSetOf(startBeam)
 
-        data class Beam(val position: TwoDimenGraph<Char>.Position, val direction: String)
-
-        val graph = TwoDimenGraph(input.joinToString("").toMutableList(), input[0].length)
-
-        val uncheckedBeams = mutableSetOf(Beam(graph.createPosition(0, 0), "right"))
+        val beamDirsInGraph = mutableMapOf<TwoDimenGraph<Char>.Position, MutableSet<String>>()
 
         while (uncheckedBeams.isNotEmpty()) {
 
@@ -90,12 +87,12 @@ fun main() {
 
             uncheckedBeams.forEach { beam ->
 
-                if (beams[beam.position]?.contains(beam.direction) == true) {
+                if (beamDirsInGraph[beam.position]?.contains(beam.direction) == true) {
                     //  Already checked
                     return@forEach
                 }
 
-                beams.getOrPut(beam.position) { mutableSetOf() }.add(beam.direction)
+                beamDirsInGraph.getOrPut(beam.position) { mutableSetOf() }.add(beam.direction)
 
                 when (graph[beam.position]) {
                     '.' -> when (beam.direction) {
@@ -143,7 +140,12 @@ fun main() {
             uncheckedBeams.addAll(nextBeams)
         }
 
-        return beams.size
+        return beamDirsInGraph
+    }
+
+    fun part1(input: List<String>): Int {
+        val graph = TwoDimenGraph(input.joinToString("").toMutableList(), input[0].length)
+        return solve(graph, Beam(graph.createPosition(0, 0), "right")).size
     }
 
     fun part2(input: List<String>): Int {
@@ -163,10 +165,23 @@ fun main() {
                 "down",
                 "left",
                 "up"
-            ).forEach dirTest@ { direction ->
+            ).forEach dirTest@{ direction ->
 
                 if (beamsCheckedMap[position]?.contains(direction) == true) {
                     //  Pair position and direction already checked before
+                    return@dirTest
+                }
+
+                val prevPosition = when (direction) {
+                    "right" -> position.left()
+                    "down" -> position.up()
+                    "left" -> position.right()
+                    "up" -> position.down()
+                    else -> throw Exception("Unknown direction: $direction")
+                }
+
+                if (prevPosition != null && graph[prevPosition] == '.') {
+                    //  No need to check this position since starting from prePosition is better
                     return@dirTest
                 }
 
