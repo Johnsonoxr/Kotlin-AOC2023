@@ -77,15 +77,15 @@ fun main() {
     data class Beam(val position: TwoDimenGraph<Char>.Position, val direction: String)
 
     fun solve(graph: TwoDimenGraph<Char>, startBeam: Beam): Map<TwoDimenGraph<Char>.Position, Set<String>> {
-        val uncheckedBeams = mutableSetOf(startBeam)
+        var beamsInProgress = setOf(startBeam)
 
         val beamDirsInGraph = mutableMapOf<TwoDimenGraph<Char>.Position, MutableSet<String>>()
 
-        while (uncheckedBeams.isNotEmpty()) {
+        while (beamsInProgress.isNotEmpty()) {
 
             val nextBeams = mutableSetOf<Beam>()
 
-            uncheckedBeams.forEach { beam ->
+            beamsInProgress.forEach { beam ->
 
                 if (beamDirsInGraph[beam.position]?.contains(beam.direction) == true) {
                     //  Already checked
@@ -136,8 +136,7 @@ fun main() {
                 }
             }
 
-            uncheckedBeams.clear()
-            uncheckedBeams.addAll(nextBeams)
+            beamsInProgress = nextBeams
         }
 
         return beamDirsInGraph
@@ -149,14 +148,9 @@ fun main() {
     }
 
     fun part2(input: List<String>): Int {
-
-        data class Beam(val position: TwoDimenGraph<Char>.Position, val direction: String)
-
         val graph = TwoDimenGraph(input.joinToString("").toMutableList(), input[0].length)
-
-        var maxLighten = 0
-
         val beamsCheckedMap = mutableMapOf<TwoDimenGraph<Char>.Position, MutableSet<String>>()
+        var maxLighten = 0
 
         graph.createPositionIterator().forEach { position ->
 
@@ -165,12 +159,7 @@ fun main() {
                 "down",
                 "left",
                 "up"
-            ).forEach dirTest@{ direction ->
-
-                if (beamsCheckedMap[position]?.contains(direction) == true) {
-                    //  Pair position and direction already checked before
-                    return@dirTest
-                }
+            ).forEach dirLoop@{ direction ->
 
                 val prevPosition = when (direction) {
                     "right" -> position.left()
@@ -181,81 +170,27 @@ fun main() {
                 }
 
                 if (prevPosition != null && graph[prevPosition] == '.') {
-                    //  No need to check this position since starting from prePosition is better
-                    return@dirTest
+                    //  No need to check this position since starting from prevPosition is better
+                    return@dirLoop
                 }
 
-                val graphBeams = mutableMapOf<TwoDimenGraph<Char>.Position, MutableSet<String>>()
-
-                val uncheckedBeams = mutableSetOf(Beam(position, direction))
-
-                while (uncheckedBeams.isNotEmpty()) {
-
-                    val nextBeams = mutableSetOf<Beam>()
-
-                    uncheckedBeams.forEach beamCheck@{ beam ->
-
-                        if (graphBeams[beam.position]?.contains(beam.direction) == true) {
-                            //  Already checked
-                            return@beamCheck
-                        }
-
-                        beamsCheckedMap.getOrPut(beam.position) { mutableSetOf() }.add(beam.direction)
-                        graphBeams.getOrPut(beam.position) { mutableSetOf() }.add(beam.direction)
-
-                        when (graph[beam.position]) {
-                            '.' -> when (beam.direction) {
-                                "right" -> beam.position.right()?.let { nextBeams.add(Beam(it, "right")) }
-                                "down" -> beam.position.down()?.let { nextBeams.add(Beam(it, "down")) }
-                                "left" -> beam.position.left()?.let { nextBeams.add(Beam(it, "left")) }
-                                "up" -> beam.position.up()?.let { nextBeams.add(Beam(it, "up")) }
-                            }
-
-                            '-' -> when (beam.direction) {
-                                "right" -> beam.position.right()?.let { nextBeams.add(Beam(it, "right")) }
-                                "left" -> beam.position.left()?.let { nextBeams.add(Beam(it, "left")) }
-                                "up", "down" -> {
-                                    beam.position.right()?.let { nextBeams.add(Beam(it, "right")) }
-                                    beam.position.left()?.let { nextBeams.add(Beam(it, "left")) }
-                                }
-                            }
-
-                            '|' -> when (beam.direction) {
-                                "up" -> beam.position.up()?.let { nextBeams.add(Beam(it, "up")) }
-                                "down" -> beam.position.down()?.let { nextBeams.add(Beam(it, "down")) }
-                                "left", "right" -> {
-                                    beam.position.up()?.let { nextBeams.add(Beam(it, "up")) }
-                                    beam.position.down()?.let { nextBeams.add(Beam(it, "down")) }
-                                }
-                            }
-
-                            '\\' -> when (beam.direction) {
-                                "up" -> beam.position.left()?.let { nextBeams.add(Beam(it, "left")) }
-                                "down" -> beam.position.right()?.let { nextBeams.add(Beam(it, "right")) }
-                                "left" -> beam.position.up()?.let { nextBeams.add(Beam(it, "up")) }
-                                "right" -> beam.position.down()?.let { nextBeams.add(Beam(it, "down")) }
-                            }
-
-                            '/' -> when (beam.direction) {
-                                "up" -> beam.position.right()?.let { nextBeams.add(Beam(it, "right")) }
-                                "down" -> beam.position.left()?.let { nextBeams.add(Beam(it, "left")) }
-                                "left" -> beam.position.down()?.let { nextBeams.add(Beam(it, "down")) }
-                                "right" -> beam.position.up()?.let { nextBeams.add(Beam(it, "up")) }
-                            }
-                        }
-                    }
-
-                    uncheckedBeams.clear()
-                    uncheckedBeams.addAll(nextBeams)
+                if (beamsCheckedMap[position]?.contains(direction) == true) {
+                    //  Position and direction already checked before
+                    return@dirLoop
                 }
 
-                if (graphBeams.size > maxLighten) {
-                    maxLighten = graphBeams.size
-                    "Max lighten: $maxLighten at $position, $direction".println()
+                val beamDirsInGraph = solve(graph, Beam(position, direction))
+
+                beamDirsInGraph.entries.forEach { (position, directions) ->
+                    beamsCheckedMap.getOrPut(position) { mutableSetOf() }.addAll(directions)
+                }
+
+                if (beamDirsInGraph.size > maxLighten) {
+                    maxLighten = beamDirsInGraph.size
+                    "Found max lighten count: $maxLighten at $position, $direction".println()
                 }
             }
         }
-
 
         return maxLighten
     }
