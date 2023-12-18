@@ -2,6 +2,7 @@ package day18
 
 import println
 import readInput
+import kotlin.system.exitProcess
 import kotlin.system.measureNanoTime
 
 private const val FOLDER = "day18"
@@ -71,64 +72,34 @@ class TwoDimenGraph<T>(graph: Collection<T>, val stride: Int) {
     }
 }
 
-data class Move(val dir: String, val steps: Int, val color: Int)
+data class Move(val dir: String, val steps: Long)
+
+data class Position(val y: Long, val x: Long) {
+    fun move(move: Move) = when (move.dir) {
+        "U" -> Position(y - move.steps, x)
+        "D" -> Position(y + move.steps, x)
+        "L" -> Position(y, x - move.steps)
+        "R" -> Position(y, x + move.steps)
+        else -> throw Exception("Not gonna happen")
+    }
+}
+
+val ccwTurns = mapOf(
+    "U" to "L",
+    "L" to "D",
+    "D" to "R",
+    "R" to "U"
+)
 
 fun main() {
-    fun part1(input: List<String>): Int {
 
-        val moves = input.map {
-            val s = it.split(" ")
-            Move(s[0], s[1].toInt(), 0)
-        }
+    fun toCcwMoves(moves: List<Move>): List<Move> {
 
-        var leftMost = Int.MAX_VALUE
-        var rightMost = Int.MIN_VALUE
-        var topMost = Int.MAX_VALUE
-        var bottomMost = Int.MIN_VALUE
-
-        var x = 0
-        var y = 0
-
-        moves.forEach { move ->
-            when (move.dir) {
-                "U" -> y -= move.steps
-                "D" -> y += move.steps
-                "L" -> x -= move.steps
-                "R" -> x += move.steps
-            }
-            if (x < leftMost) leftMost = x
-            if (x > rightMost) rightMost = x
-            if (y < topMost) topMost = y
-            if (y > bottomMost) bottomMost = y
-        }
 
         val isCcw = moves.windowed(2).sumOf { (m1, m2) ->
-            when (m1.dir) {
-                "U" -> when (m2.dir) {
-                    "L" -> 1
-                    "R" -> -1
-                    else -> 0
-                }
-
-                "D" -> when (m2.dir) {
-                    "L" -> -1
-                    "R" -> 1
-                    else -> 0
-                }
-
-                "L" -> when (m2.dir) {
-                    "U" -> -1
-                    "D" -> 1
-                    else -> 0
-                }
-
-                "R" -> when (m2.dir) {
-                    "U" -> 1
-                    "D" -> -1
-                    else -> 0
-                }
-
-                else -> 0
+            when (m2.dir) {
+                ccwTurns[m1.dir] -> 1
+                else -> -1
             }.toInt()
         } > 0
 
@@ -140,77 +111,127 @@ fun main() {
                 "R" -> "L"
                 else -> throw Exception("Not gonna happen")
             }
-            Move(dir, it.steps, it.color)
+            Move(dir, it.steps)
         }
+        return ccwMoves
+    }
 
-        "rectangle: $leftMost, $topMost, $rightMost, $bottomMost".println()
-        val graphH = bottomMost - topMost + 1
-        val graphW = rightMost - leftMost + 1
+    fun solve(moves: List<Move>): Long {
 
-        val graph = TwoDimenGraph(List(graphH * graphW) { '.' }, graphW)
-
-        var currentP = graph.createPosition(-topMost, -leftMost)
-
-        val trench = mutableListOf<TwoDimenGraph<Char>.Position>()
-        val diggedPositions = mutableSetOf<TwoDimenGraph<Char>.Position>()
-        var diggingPositions = mutableSetOf<TwoDimenGraph<Char>.Position>()
-
-        ccwMoves.forEach { move ->
-            val nextP = when (move.dir) {
-                "U" -> currentP.up(move.steps)
-                "D" -> currentP.down(move.steps)
-                "L" -> currentP.left(move.steps)
-                "R" -> currentP.right(move.steps)
-                else -> null
-            } ?: throw Exception("Not gonna happen")
-
-            currentP.createIntervalPositionsTo(nextP).forEach {
-                trench.add(it)
-                when (move.dir) {
-                    "U" -> it.left()
-                    "D" -> it.right()
-                    "L" -> it.down()
-                    "R" -> it.up()
-                    else -> throw Exception("Not gonna happen")
-                }?.let { seed -> diggingPositions.add(seed) }
+        data class Movement(val x: Long, val y: Long, val dir: String, val steps: Long) {
+            fun rangeX(): LongRange = when (dir) {
+                "L" -> x - steps..x
+                "R" -> x..x + steps
+                else -> throw Exception("Not gonna happen")
             }
 
-            currentP = nextP
+            fun rangeY(): LongRange = when (dir) {
+                "U" -> y - steps..y
+                "D" -> y..y + steps
+                else -> throw Exception("Not gonna happen")
+            }
         }
 
-        diggingPositions.removeAll(trench.toSet())
+        fun LongRange.isIntersect(other: LongRange): Boolean {
+            return this.first <= other.last && this.last >= other.first
+        }
 
-        diggedPositions.addAll(trench)
-        diggedPositions.addAll(diggingPositions)
+        val ccwMoves = toCcwMoves(moves)
 
-        while (diggingPositions.isNotEmpty()) {
-            val nextDigging = mutableSetOf<TwoDimenGraph<Char>.Position>()
+        val newMoves = mutableListOf<Move>()
 
-            diggingPositions.forEach { position ->
-                position.neighbors().forEach { neighbor ->
-                    if (neighbor !in diggedPositions) {
-                        nextDigging.add(neighbor)
-                    }
+        (ccwMoves.takeLast(1) + ccwMoves + ccwMoves.take(1)).windowed(3).forEach { (m1, m2, m3) ->
+
+            val isTurn1Ccw = ccwTurns[m1.dir] == m2.dir
+            val isTurn2Ccw = ccwTurns[m2.dir] == m3.dir
+            val stepFix = when {
+                isTurn1Ccw && isTurn2Ccw -> m2.steps + 1
+                isTurn1Ccw || isTurn2Ccw -> m2.steps
+                else -> m2.steps - 1
+            }
+
+            newMoves.add(Move(m2.dir, stepFix))
+        }
+
+        val movePosition = mutableListOf(Position(0, 0))
+        newMoves.dropLast(1).forEach { move ->
+            movePosition.add(movePosition.last().move(move))
+        }
+
+        val movements = newMoves.zip(movePosition).map { (move, position) ->
+            Movement(position.x, position.y, move.dir, move.steps)
+        }
+
+        movements.forEach { it.println() }
+        exitProcess(0)
+
+        data class Rectangle(val left: Long, val top: Long, val right: Long, val bottom: Long) {
+            val area = (right - left + 1) * (bottom - top + 1)
+        }
+
+        val rectangles = mutableSetOf<Rectangle>()
+
+        var closedMovementsList = mutableListOf(movements)
+
+        while (closedMovementsList.isNotEmpty()) {
+            val newClosedList = closedMovementsList.drop(1).toMutableList()
+
+            val firstMovements = closedMovementsList.first()
+            val theMovement = firstMovements.filter { it.dir == "U" }.maxBy { it.y }
+
+            val rectLeft = firstMovements.filter { m ->
+                m.dir == "D" && m.x < theMovement.x && m.rangeY().isIntersect(theMovement.rangeY())
+            }.maxOf { it.x }
+
+            val rect = Rectangle(rectLeft, theMovement.y - theMovement.steps, theMovement.x, theMovement.y)
+            rectangles.add(rect)
+
+            var newClosedMovements: MutableList<Movement> = mutableListOf()
+            firstMovements.forEach { m ->
+                if (m.dir == "D" && m.rangeY().isIntersect(theMovement.rangeY())) {
+                    newClosedMovements.dropLast(1)
                 }
             }
 
-            diggedPositions.addAll(nextDigging)
-
-            diggingPositions = nextDigging.toMutableSet()
+            closedMovementsList = newClosedList
         }
 
-        return diggedPositions.size
+        return rectangles.sumOf { it.area }
+    }
+
+    fun part1(input: List<String>): Long {
+
+        val moves = input.map {
+            val s = it.split(" ")
+            Move(s[0], s[1].toLong())
+        }
+
+        return solve(moves)
     }
 
     fun part2(input: List<String>): Long {
-        return 1
+
+        val moves = input.map { line ->
+            val s = "#(\\w+)".toRegex().find(line)!!.groupValues.last()
+            val dir = when (s.last()) {
+                '0' -> "R"
+                '1' -> "D"
+                '2' -> "L"
+                '3' -> "U"
+                else -> throw Exception("Not gonna happen")
+            }
+            val steps = s.dropLast(1).toLong(16)
+            Move(dir, steps)
+        }
+
+        return solve(moves)
     }
 
-    check(part1(readInput("$FOLDER/test")) == 62)
+    check(part1(readInput("$FOLDER/test")) == 62L)
     check(part2(readInput("$FOLDER/test")) == 952408144115L)
 
     val input = readInput("$FOLDER/input")
-    val part1Result: Int
+    val part1Result: Long
     val part1Time = measureNanoTime {
         part1Result = part1(input)
     }
