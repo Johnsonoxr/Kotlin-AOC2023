@@ -1,11 +1,9 @@
 package day18
 
-import println
 import readInput
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.system.exitProcess
 import kotlin.system.measureNanoTime
 
 private const val FOLDER = "day18"
@@ -67,11 +65,8 @@ fun main() {
         return ccwMoves
     }
 
-    fun solve(moves: List<Move>): Long {
-
+    fun toCcwEdges(ccwMoves: List<Move>): List<Edge> {
         val edges = mutableListOf<Edge>()
-
-        val ccwMoves = toCcwMoves(moves)
 
         var startP = Position(0, 0)
         (ccwMoves.takeLast(1) + ccwMoves + ccwMoves.take(1)).windowed(3).forEach { (m1, m2, m3) ->
@@ -87,39 +82,29 @@ fun main() {
             startP = endP
         }
 
+        return edges
+    }
+
+    fun solve(moves: List<Move>): Long {
+
+        val ccwMoves = toCcwMoves(moves)
+        val edges = toCcwEdges(ccwMoves).toMutableList()
+
         val rectangles = mutableListOf<Rectangle>()
 
-        fun Edge.describe(): String {
+        fun Edge.isCross(rectangle: Rectangle): Boolean {
             return when {
-                from.x < to.x -> "R"
-                from.x > to.x -> "L"
-                from.y < to.y -> "D"
-                from.y > to.y -> "U"
-                else -> throw Exception("Not gonna happen")
-            }
-        }
-
-        fun Edge.cross(edge: Edge): Boolean {
-            return when {
-                from.x == to.x && edge.from.x == edge.to.x -> false
-                from.y == to.y && edge.from.y == edge.to.y -> false
                 from.x == to.x -> {
-                    val x = from.x
-                    val y = edge.from.y
-                    val y1 = min(from.y, to.y)
-                    val y2 = max(from.y, to.y)
-                    val x1 = min(edge.from.x, edge.to.x)
-                    val x2 = max(edge.from.x, edge.to.x)
-                    x in x1 + 1..<x2 && y in y1 + 1..<y2
+                    val edgeX = from.x
+                    val edgeTop = min(from.y, to.y)
+                    val edgeBottom = max(from.y, to.y)
+                    edgeX in rectangle.left + 1..<rectangle.right && (edgeTop < rectangle.bottom && edgeBottom > rectangle.top)
                 }
                 from.y == to.y -> {
-                    val y = from.y
-                    val x = edge.from.x
-                    val x1 = min(from.x, to.x)
-                    val x2 = max(from.x, to.x)
-                    val y1 = min(edge.from.y, edge.to.y)
-                    val y2 = max(edge.from.y, edge.to.y)
-                    x in x1 + 1..<x2 && y in y1 + 1..<y2
+                    val edgeY = from.y
+                    val edgeLeft = min(from.x, to.x)
+                    val edgeRight = max(from.x, to.x)
+                    edgeY in rectangle.top + 1..<rectangle.bottom && (edgeLeft < rectangle.right && edgeRight > rectangle.left)
                 }
                 else -> throw Exception("Not gonna happen")
             }
@@ -127,10 +112,22 @@ fun main() {
 
         while (edges.isNotEmpty()) {
 
-            "Edges: ${edges.size}".println()
+            val zeroLengthEdges = edges.firstOrNull { it.length == 0L }
+            if (zeroLengthEdges != null) {
+                val idx = edges.indexOf(zeroLengthEdges)
+                val edgeBefore = edges.getOrNull(idx - 1) ?: edges.last()
+                val edgeAfter = edges.getOrNull(idx + 1) ?: edges.first()
 
-            var changed = false
-            for ((e0, e1, e2, e3, e4) in (edges.takeLast(2) + edges + edges.take(2)).windowed(5)) {
+                val edgeMerged = Edge(edgeBefore.from, edgeAfter.to)
+                edges.add(idx, edgeMerged)
+                edges.remove(zeroLengthEdges)
+                edges.remove(edgeBefore)
+                edges.remove(edgeAfter)
+
+                continue
+            }
+
+            for ((e0, e1, e2, e3, e4) in (edges + edges.take(4)).windowed(5)) {
 
                 val offset1 = e1.to - e1.from
                 val offset2 = e2.to - e2.from
@@ -166,7 +163,7 @@ fun main() {
                     max(rectangleCornerPair.first.y, rectangleCornerPair.second.y)
                 )
 
-                if (edges.any { it.from.isInside(rectangle) }) {
+                if (edges.any { it.isCross(rectangle) }) {
                     continue
                 }
 
@@ -207,12 +204,7 @@ fun main() {
                     }
                 }
 
-                changed = true
-
                 break
-            }
-            if (!changed) {
-                throw Exception("Wryyyyyyyy")
             }
         }
 
