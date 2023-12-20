@@ -97,44 +97,72 @@ fun main() {
             var s: IntRange = 1..4000,
         )
 
-        val xmasRanges = mutableListOf<XmasRange>()
-
+        data class Backtrack(var rule: Rule, var range: XmasRange, val isAcceptEntry: Boolean)
 
         fun IntRange.intersect(other: IntRange): IntRange {
             return (this.first.coerceAtLeast(other.first))..(this.last.coerceAtMost(other.last))
         }
 
-        val ranges = mutableListOf<Pair<XmasRange, Rule>>()
+        var backtracks = mutableListOf<Backtrack>()
 
-
-
-        rules.filter { it.acceptId == "A" || it.rejectId == "A" }.forEach { finalRule ->
-            val range = XmasRange()
-            xmasRanges.add(range)
-
-            val ruleRange = when {
-                finalRule.acceptId == "A" && finalRule.rejectId == "A" -> 1..4000
-                finalRule.acceptId == "A" && finalRule.op == '>' -> finalRule.v + 1..4000
-                finalRule.acceptId == "A" && finalRule.op == '<' -> 1..<finalRule.v
-                finalRule.rejectId == "A" && finalRule.op == '>' -> 1..finalRule.v
-                finalRule.rejectId == "A" && finalRule.op == '<' -> finalRule.v..4000
-                else -> throw Exception("Unknown rule $finalRule")
-            }
-
-            when (finalRule.param) {
-                'x' -> range.x = range.x.intersect(ruleRange)
-                'm' -> range.m = range.m.intersect(ruleRange)
-                'a' -> range.a = range.a.intersect(ruleRange)
-                's' -> range.s = range.s.intersect(ruleRange)
-                else -> throw Exception("Unknown parameter ${finalRule.param}")
-            }
-
-            rules.filter { it.id == finalRule.id }.forEach { rule ->
-                val copyRange = range.copy()
-            }
+        rules.filter { it.acceptId == "A" }.forEach { finalRule ->
+            backtracks.add(Backtrack(finalRule, XmasRange(), true))
         }
 
-        return 1
+        rules.filter { it.rejectId == "A" }.forEach { finalRule ->
+            backtracks.add(Backtrack(finalRule, XmasRange(), false))
+        }
+
+        val doneBacktracks = mutableListOf<Backtrack>()
+
+        while (backtracks.isNotEmpty()) {
+            val nextBacktracks = mutableListOf<Backtrack>()
+
+            backtracks.forEach { bt ->
+
+                val ruleRange = when {
+                    bt.isAcceptEntry && bt.rule.op == '>' -> bt.rule.v + 1..4000
+                    bt.isAcceptEntry && bt.rule.op == '<' -> 1..<bt.rule.v
+                    !bt.isAcceptEntry && bt.rule.op == '>' -> 1..bt.rule.v
+                    !bt.isAcceptEntry && bt.rule.op == '<' -> bt.rule.v..4000
+                    else -> throw Exception("Unknown rule ${bt.rule}")
+                }
+
+                when (bt.rule.param) {
+                    'x' -> bt.range.x = bt.range.x.intersect(ruleRange)
+                    'm' -> bt.range.m = bt.range.m.intersect(ruleRange)
+                    'a' -> bt.range.a = bt.range.a.intersect(ruleRange)
+                    's' -> bt.range.s = bt.range.s.intersect(ruleRange)
+                    else -> throw Exception("Unknown parameter ${bt.rule.param}")
+                }
+
+                if (bt.rule.id == "in") {
+                    doneBacktracks.add(bt)
+                    return@forEach
+                }
+
+                rules.filter { it.acceptId == bt.rule.id }.forEach { rule ->
+                    val copyRange = bt.range.copy()
+                    nextBacktracks.add(Backtrack(rule, copyRange, true))
+                }
+
+                rules.filter { it.rejectId == bt.rule.id }.forEach { rule ->
+                    val copyRange = bt.range.copy()
+                    nextBacktracks.add(Backtrack(rule, copyRange, false))
+                }
+            }
+
+            backtracks = nextBacktracks
+        }
+
+        return doneBacktracks.sumOf { bt ->
+            bt.range.x.count()
+            val x: Long = (bt.range.x.last - bt.range.x.first + 1).toLong()
+            val m: Long = (bt.range.m.last - bt.range.m.first + 1).toLong()
+            val a: Long = (bt.range.a.last - bt.range.a.first + 1).toLong()
+            val s: Long = (bt.range.s.last - bt.range.s.first + 1).toLong()
+            return@sumOf x * m * a * s
+        }
     }
 
     check(part1(readInput("$FOLDER/test")) == 19114)
