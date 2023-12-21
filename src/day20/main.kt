@@ -144,11 +144,40 @@ fun main() {
         var signalHigh = 0
         var signalLow = 0
 
+        val rmModule = modules.first { it is Module.Conj && it.n == "rm" } as Module.Conj
+
+        fun findConjList(module: Module): List<List<Module>> {
+            return when (module) {
+                is Module.Conj -> {
+                    val conjList = module.conjMap.keys.map { key ->
+                        findConjList(modules.first { m -> m.name == key })
+                    }.flatten()
+                    conjList.map { listOf(module) + it }
+                }
+
+                else -> listOf(listOf(module))
+            }
+        }
+
+        val conjList = findConjList(modules.first { it.name == "rm" })
+
+        conjList.forEach { lst ->
+            lst.joinToString("-") { "${it::class.java.simpleName}(${it.name})" }.println()
+        }
+
+        val flipFlops = conjList.map { it.last() } as List<Module.FlipFlop>
+
+        val ffMap = flipFlops.associateWith { mutableListOf<Char>() }
+
         var buttonPressCount = 0L
         while (true) {
             buttonPressCount++
 
-            if (buttonPressCount % 100000 == 0L) {
+            if (buttonPressCount > 1e6) {
+                break
+            }
+
+            if (buttonPressCount % 1000000 == 0L) {
                 println("Button press count: $buttonPressCount")
             }
 
@@ -210,10 +239,48 @@ fun main() {
                 signals = newSignals
             }
 
+//            flipFlops.forEach { ff ->
+//                ffMap[ff.name]!!.add(if (ff.isHigh) '1' else '0')
+//            }
+
+            ffMap.entries.forEach { it.value.add(if (it.key.isHigh) '1' else '0') }
+
             if (signals.any { !it.isHigh && it.module.name == "rx" }) {
                 break
             }
         }
+
+//        ffMap.entries.forEach { (ff, list) ->
+//            "Checking ${ff.name}".println()
+//            val halfList = list.takeLast(list.size / 2)
+//            var patternFound = false
+//            for (patternSize in 1..halfList.size / 2) {
+//
+//                if (patternSize % 100 == 0) {
+//                    println("Checking pattern size $patternSize")
+//                }
+//
+//                patternFound = true
+//
+//                val chunks = halfList.chunked(patternSize)
+//                val pattern = chunks.first()
+//
+//                for (chunk in chunks.drop(1)) {
+//                    if (chunk != pattern) {
+//                        patternFound = false
+//                        break
+//                    }
+//                }
+//
+//                if (patternFound) {
+//                    println("Pattern found for ${ff.name}: $patternSize")
+//                    break
+//                }
+//            }
+//            if (!patternFound) {
+//                println("No pattern found for ${ff.name}")
+//            }
+//        }
 
         return buttonPressCount
     }
