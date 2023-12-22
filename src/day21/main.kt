@@ -7,10 +7,6 @@ import kotlin.system.measureNanoTime
 private const val FOLDER = "day21"
 
 data class P(val y: Long, val x: Long) {
-    val info: MutableMap<String, Any> by lazy {
-        mutableMapOf()
-    }
-
     fun neighbors(): List<P> {
         return listOf(
             P(y - 1, x),
@@ -21,119 +17,100 @@ data class P(val y: Long, val x: Long) {
     }
 }
 
-class InfiniteGraph<T>(data: Map<P, T>, val height: Long, val width: Long) {
-    val data = data.toMutableMap()
-
-    operator fun get(p: P): T? {
-        return data[p]
-    }
-
-    operator fun set(p: P, value: T) {
-        data[p] = value
-    }
-}
-
 fun Long.positiveMod(other: Long): Long {
     return ((this % other) + other) % other
 }
 
 fun main() {
 
-    fun flood(rocks: Set<P>, height: Long, width: Long, start: P, stepCount: Int): Set<P> {
-        var seeds = mutableSetOf(start)
-        val visited = mutableSetOf(start)
-
-        repeat(stepCount) {
-
-            val nextSeeds = mutableSetOf<P>()
-            seeds.forEach { seed ->
-                val neighborSeeds = seed.neighbors()
-
-                neighborSeeds.forEach neighborLoop@{ neighborSeed ->
-
-                    if (neighborSeed in visited) {
-                        return@neighborLoop
-                    }
-
-                    val modNeighborSeed = P(neighborSeed.y.positiveMod(height), neighborSeed.x.positiveMod(width))
-                    if (modNeighborSeed in rocks) {
-                        return@neighborLoop
-                    }
-
-                    nextSeeds.add(neighborSeed)
-                }
-            }
-
-            seeds = nextSeeds
-            visited.addAll(nextSeeds)
-        }
-
-        return visited
-    }
-
     fun solve(input: List<String>, stepCount: Long): Long {
 
-        val map = InfiniteGraph(input.mapIndexed { y, s ->
-            s.mapIndexed { x, c ->
-                P(y.toLong(), x.toLong()) to c
-            }
-        }.flatten().toMap(), input.size.toLong(), input[0].length.toLong())
+        val rocks = input.flatMapIndexed { y, line ->
+            line.mapIndexed { x, c ->
+                if (c == '#') P(y.toLong(), x.toLong()) else null
+            }.filterNotNull()
+        }.toSet()
 
-        val startP = map.data.filter { it.value == 'S' }.keys.first()
-        val rocks = map.data.filter { it.value == '#' }.keys.toSet()
+        val len = input[0].length.toLong()
+        val startP = P(len / 2, len / 2)
 
-        val isStartAtEven = (startP.x % 2 == startP.y % 2)
-        val countEven = isStartAtEven == (stepCount % 2 == 0L)
+        val visitedInactivated = mutableSetOf<P>()
+        var visitedActivated = setOf<P>()
+        var flooding = setOf(startP)
 
-        if (stepCount < map.width.toInt() * 2) {
-            return flood(rocks, map.height, map.width, startP, stepCount.toInt()).count { p ->
-                when (countEven) {
-                    true -> p.x % 2 == p.y % 2
-                    else -> p.x % 2 != p.y % 2
+        val patternRecorder = mutableListOf<Long>()
+
+        var step = 1L
+        while (true) {
+            val nextFlooding = mutableSetOf<P>()
+            flooding.forEach { floodingP ->
+                val neighborPs = floodingP.neighbors()
+
+                neighborPs.forEach neighborLoop@{ neighborP ->
+
+                    if (neighborP in visitedActivated) {
+                        return@neighborLoop
+                    }
+
+                    val modNeighborP = P(neighborP.y.positiveMod(len), neighborP.x.positiveMod(len))
+                    if (modNeighborP in rocks) {
+                        return@neighborLoop
+                    }
+
+                    nextFlooding.add(neighborP)
                 }
-            }.toLong()
-        }
-
-        val len = map.width
-
-        var step = stepCount % (2 * len)
-
-        val diff1 = mutableListOf<Long>()
-        val diff2 = mutableListOf<Long>()
-        val results = mutableListOf<Long>()
-
-        while (diff2.lastOrNull() == null || diff2.last() != diff2.getOrNull(diff2.size - 2)) {
-
-            step += 2 * len
-
-            val rst = flood(rocks, len, len, startP, step.toInt()).count { p ->
-                when (countEven) {
-                    true -> p.x.positiveMod(2) == p.y.positiveMod(2)
-                    else -> p.x.positiveMod(2) != p.y.positiveMod(2)
-                }
-            }.toLong()
-
-            val diff = rst - (results.lastOrNull() ?: 0L)
-            results.add(rst)
-            diff1.add(diff)
-            if (diff1.size > 1) {
-                diff2.add(diff - diff1[diff1.size - 2])
             }
 
-            "Step: $step, diff: ${diff1.lastOrNull()}, diff2: ${diff2.lastOrNull()}, rst: $rst".println()
+            visitedInactivated.addAll(visitedActivated)
+            visitedActivated = flooding
+            flooding = nextFlooding
+
+            if ((stepCount - step) % (2 * len) == 0L) {
+                val flooded = visitedActivated + visitedInactivated + flooding
+                val countEven = step % 2 == 0L
+                val floodedSize = flooded.count {
+                    when (countEven) {
+                        true -> it.x.positiveMod(2) == it.y.positiveMod(2)
+                        else -> it.x.positiveMod(2) != it.y.positiveMod(2)
+                    }
+                }.toLong()
+
+                "Step $step/$stepCount: $floodedSize".println()
+
+                patternRecorder.add(floodedSize)
+                if (step == stepCount) {
+                    return floodedSize
+                }
+
+                if (patternRecorder.size >= 4) {
+                    val degree1 = patternRecorder.windowed(2).map { it[1] - it[0] }
+                    val degree2 = degree1.windowed(2).map { it[1] - it[0] }
+                    if (degree2.size >= 2 && degree2.last() == degree2[degree2.size - 2]) {
+                        "Pattern found: degree 2 with \"${degree2.last()}\"".println()
+                        patternRecorder.joinToString("") { it.toString().padStart(10, ' ') }.println()
+                        degree1.joinToString("", prefix = " ".repeat(5)) { it.toString().padStart(10, ' ') }.println()
+                        degree2.joinToString("", prefix = " ".repeat(10)) { it.toString().padStart(10, ' ') }.println()
+                        break
+                    }
+                }
+            }
+
+            step++
         }
 
-        val diffOfDiff = diff1.last() - diff1.getOrNull(diff1.size - 2)!!
-        var cnt = results.last()
-        var diff = diff1.last()
+        val largeStepCount = (stepCount - step) / (2 * len)
 
-        while (step < stepCount) {
-            step += 2 * len
-            diff += diffOfDiff
-            cnt += diff
+        val last3 = patternRecorder.takeLast(3)
+        var plotCount = last3[2]
+        var incDiff = last3[2] - last3[1]
+        val constDiff = (last3[2] - last3[1]) - (last3[1] - last3[0])
+
+        for (i in 1..largeStepCount) {
+            incDiff += constDiff
+            plotCount += incDiff
         }
 
-        return cnt
+        return plotCount
     }
 
     fun part1(input: List<String>, stepCount: Long): Long {
