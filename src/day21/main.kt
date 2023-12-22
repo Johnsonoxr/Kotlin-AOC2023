@@ -41,7 +41,7 @@ fun main() {
 
     fun flood(rocks: Set<P>, height: Long, width: Long, start: P, stepCount: Int): Set<P> {
         var seeds = mutableSetOf(start)
-        val visited = mutableSetOf<P>()
+        val visited = mutableSetOf(start)
 
         repeat(stepCount) {
 
@@ -95,60 +95,45 @@ fun main() {
         }
 
         val len = map.width
-        val chunkCount: Long = stepCount / len
-        val oddChunkCount = ((chunkCount - 1) / 2 * 2 + 1).let { it * it }
-        val evenChunkCount = (chunkCount / 2 * 2).let { it * it }
 
-        "Chunk count: $chunkCount, odd chunk count: $oddChunkCount, even chunk count: $evenChunkCount".println()
+        var step = stepCount % (2 * len)
 
-        val edgeFilter = when (chunkCount % 2 == 0L) {
-            true -> { p: P -> p.x % 2 == p.y % 2 }
-            else -> { p: P -> p.x % 2 != p.y % 2 }
+        val diff1 = mutableListOf<Long>()
+        val diff2 = mutableListOf<Long>()
+        val results = mutableListOf<Long>()
+
+        while (diff2.lastOrNull() == null || diff2.last() != diff2.getOrNull(diff2.size - 2)) {
+
+            step += 2 * len
+
+            val rst = flood(rocks, len, len, startP, step.toInt()).count { p ->
+                when (countEven) {
+                    true -> p.x.positiveMod(2) == p.y.positiveMod(2)
+                    else -> p.x.positiveMod(2) != p.y.positiveMod(2)
+                }
+            }.toLong()
+
+            val diff = rst - (results.lastOrNull() ?: 0L)
+            results.add(rst)
+            diff1.add(diff)
+            if (diff1.size > 1) {
+                diff2.add(diff - diff1[diff1.size - 2])
+            }
+
+            "Step: $step, diff: ${diff1.lastOrNull()}, diff2: ${diff2.lastOrNull()}, rst: $rst".println()
         }
 
-        val range = 0..<len
-        val doubleRange = 0..<(len * 2)
+        val diffOfDiff = diff1.last() - diff1.getOrNull(diff1.size - 2)!!
+        var cnt = results.last()
+        var diff = diff1.last()
 
-        fun LongRange.offset(offset: Long): LongRange {
-            return (start + offset)..(endInclusive + offset)
+        while (step < stepCount) {
+            step += 2 * len
+            diff += diffOfDiff
+            cnt += diff
         }
 
-        val floodTest = flood(rocks, len, len, startP, (stepCount % len + len * 2).toInt())
-
-        val oddFilled = floodTest.count { it.x in range && it.y in range && it.x % 2 == it.y % 2 }
-        val evenFilled = floodTest.count { it.x in range && it.y in range && it.x % 2 != it.y % 2 }
-
-        val upNonFilled = floodTest.count { it.x in range && it.y in doubleRange.offset(-3 * len) && edgeFilter(it) }
-        val bottomNonFilled = floodTest.count { it.x in range && it.y in doubleRange.offset(2 * len) && edgeFilter(it) }
-        val leftNonFilled = floodTest.count { it.x in doubleRange.offset(-3 * len) && it.y in range && edgeFilter(it) }
-        val rightNonFilled = floodTest.count { it.x in doubleRange.offset(2 * len) && it.y in range && edgeFilter(it) }
-
-        val leftTopSlope1 = floodTest.count { it.x in range.offset(-len) && it.y in range.offset(-2 * len) && edgeFilter(it) }
-        val leftTopSlope2 = floodTest.count { it.x in range.offset(-len) && it.y in range.offset(-len) && edgeFilter(it) }
-        val leftTopSlope = (leftTopSlope1 + leftTopSlope2) * chunkCount - leftTopSlope2
-
-        val rightTopSlope1 = floodTest.count { it.x in range.offset(len) && it.y in range.offset(-2 * len) && edgeFilter(it) }
-        val rightTopSlope2 = floodTest.count { it.x in range.offset(len) && it.y in range.offset(-len) && edgeFilter(it) }
-        val rightTopSlope = (rightTopSlope1 + rightTopSlope2) * chunkCount - rightTopSlope2
-
-        val leftBottomSlope1 = floodTest.count { it.x in range.offset(-len) && it.y in range.offset(2 * len) && edgeFilter(it) }
-        val leftBottomSlope2 = floodTest.count { it.x in range.offset(-len) && it.y in range.offset(len) && edgeFilter(it) }
-        val leftBottomSlope = (leftBottomSlope1 + leftBottomSlope2) * chunkCount - leftBottomSlope2
-
-        val rightBottomSlope1 = floodTest.count { it.x in range.offset(len) && it.y in range.offset(2 * len) && edgeFilter(it) }
-        val rightBottomSlope2 = floodTest.count { it.x in range.offset(len) && it.y in range.offset(len) && edgeFilter(it) }
-        val rightBottomSlope = (rightBottomSlope1 + rightBottomSlope2) * chunkCount - rightBottomSlope2
-
-        val filledCount = oddFilled * oddChunkCount + evenFilled * evenChunkCount
-        val nonFilledCount = upNonFilled + bottomNonFilled + leftNonFilled + rightNonFilled +
-                leftTopSlope + rightTopSlope + leftBottomSlope + rightBottomSlope
-
-        "Upper non-filled: $upNonFilled, bottom non-filled: $bottomNonFilled, left non-filled: $leftNonFilled, right non-filled: $rightNonFilled".println()
-        "Left top slope: $leftTopSlope, right top slope: $rightTopSlope, left bottom slope: $leftBottomSlope, right bottom slope: $rightBottomSlope".println()
-
-        "Filled count: $filledCount, non-filled count: $nonFilledCount, total: ${filledCount + nonFilledCount}".println()
-
-        return filledCount + nonFilledCount
+        return cnt
     }
 
     fun part1(input: List<String>, stepCount: Long): Long {
