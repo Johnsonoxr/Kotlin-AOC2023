@@ -2,6 +2,7 @@ package day20
 
 import println
 import readInput
+import kotlin.system.exitProcess
 import kotlin.system.measureNanoTime
 
 private const val FOLDER = "day20"
@@ -140,6 +141,50 @@ fun main() {
 
     fun part2(input: List<String>): Long {
         val modules = parseModules(input)
+
+        val connectionFrom = modules.associateWith { it.connections }
+        val connectionTo = modules.associateWith { modules.filter { m -> it in m.connections } }
+
+        val cycle = modules.associateWith { 1L }.toMutableMap()
+        var transporting = setOf(modules.first { it is Module.Button })
+
+        while (transporting.isNotEmpty()) {
+
+            val nextTransporting = mutableSetOf<Module>()
+
+            transporting.forEach { m ->
+
+//                if (m in cycleMap) {
+//                    return@forEach
+//                }
+//
+//                if (connectionTo[m]!!.any { it !in cycleMap }) {
+//                    return@forEach
+//                }
+
+                connectionFrom[m]!!.forEach { nextTransporting.add(it) }
+
+                when (m) {
+                    is Module.Button, is Module.Broadcaster, is Module.Dummy -> {
+//                        cycle[m] = cycle[m]!!
+//                        cycleMap[m] = connectionTo[m]!!.map { cycleMap[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
+                    }
+
+                    is Module.FlipFlop -> {
+                        cycle[m] = 2 * connectionTo[m]!!.map { cycle[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
+//                        cycleMap[m] = 2 * connectionTo[m]!!.map { cycleMap[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
+                    }
+
+                    is Module.Conj -> {
+                        cycle[m] = connectionTo[m]!!.map { cycle[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
+                    }
+                }
+
+            }
+        }
+
+        exitProcess(0)
+
 
         var signalHigh = 0
         var signalLow = 0
