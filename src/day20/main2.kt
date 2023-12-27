@@ -2,6 +2,8 @@ package day20
 
 import println
 import readInput
+import kotlin.math.max
+import kotlin.math.pow
 import kotlin.system.measureNanoTime
 
 private const val FOLDER = "day20"
@@ -112,6 +114,67 @@ fun main() {
     }
 
     fun part2(input: List<String>): Long {
+
+        data class CycleInfo(val loopLength: Long, val lowSignalSendInACycle: Long)
+
+        fun Long.factorial(): List<Long> {
+            val result = mutableListOf<Long>()
+            var current = this
+            var i = 2L
+            while (current > 1) {
+                if (current % i == 0L) {
+                    result.add(i)
+                    current /= i
+                } else {
+                    i++
+                }
+            }
+            return result.takeIf { it.isNotEmpty() } ?: listOf(1)
+        }
+
+        val modules = parseModules(input)
+
+        val cycleInfos = mutableMapOf<M, CycleInfo>()
+
+        var currentModules = modules.filter { it.name == "button" }
+
+        while (currentModules.isNotEmpty()) {
+            val newModules = mutableListOf<M>()
+
+            currentModules.forEach { module ->
+                when (module) {
+                    is M.General -> cycleInfos[module] = CycleInfo(1, 1)
+                    is M.FlipFlop -> {
+                        val fromCycleInfoList = module.fromConnections.mapNotNull { cycleInfos[it] }
+                        val factors = fromCycleInfoList.map { it.loopLength.factorial().groupBy { f -> f } }
+                        val factorsMap = factors.map { it.mapValues { f -> f.value.size } }
+                        val commonFactors = factorsMap.reduce { acc, map -> acc.mapValues { (k, v) -> max(v, (map[k] ?: 0)) } }
+                        val length = commonFactors.map { (k, v) -> k.toDouble().pow(v).toLong() }.reduce { acc, l -> acc * l }
+                        val signalSendsListInCommonFactor = fromCycleInfoList.map { length / it.loopLength * it.lowSignalSendInACycle }
+                        val signalSendsInCommonFactor = signalSendsListInCommonFactor.reduce { acc, l -> acc + l }
+                        val cycleInfo = when {
+                            signalSendsInCommonFactor % 2 == 0L -> CycleInfo(length, signalSendsInCommonFactor / 2)
+                            else -> CycleInfo(length * 2, signalSendsInCommonFactor)
+                        }
+                        "FlipFlop ${module.name} info: $cycleInfo".println()
+                        cycleInfos[module] = cycleInfo
+                    }
+
+                    is M.Conj -> {
+                        val fromCycleInfoList = module.fromConnections.mapNotNull { cycleInfos[it] }
+                        val length = fromCycleInfoList.map { it.loopLength }.reduce { acc, l -> acc * l }
+                        val signalSendsInACycle = 1L
+                        val cycleInfo = CycleInfo(length, signalSendsInACycle)
+                        "Conj ${module.name} info: $cycleInfo".println()
+                        cycleInfos[module] = cycleInfo
+                    }
+                }
+                newModules.addAll(module.toConnections)
+            }
+
+            currentModules = newModules
+        }
+
         return 1
     }
 
@@ -124,7 +187,8 @@ fun main() {
     }
     val part2Result: Long
     val part2Time = measureNanoTime {
-        part2Result = part2(input)
+//        part2Result = part2(input)
+        part2Result = part2(readInput("$FOLDER/test2"))
     }
 
     println("Part 1 result: $part1Result")
