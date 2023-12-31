@@ -2,7 +2,6 @@ package day20
 
 import println
 import readInput
-import kotlin.math.max
 import kotlin.math.pow
 import kotlin.system.measureNanoTime
 
@@ -115,8 +114,6 @@ fun main() {
 
     fun part2(input: List<String>): Long {
 
-        data class CycleInfo(val loopLength: Long, val lowSignalSendInACycle: Long)
-
         fun Long.factorial(): List<Long> {
             val result = mutableListOf<Long>()
             var current = this
@@ -134,48 +131,35 @@ fun main() {
 
         val modules = parseModules(input)
 
-        val cycleInfos = mutableMapOf<M, CycleInfo>()
+        val cycles = modules.first { it.name == "broadcaster" }.toConnections.map { m ->
+            var current = m
 
-        var currentModules = modules.filter { it.name == "button" }
+            val nodes = mutableListOf<M>()
+            val conjInjectingNodes = mutableListOf<M>()
 
-        while (currentModules.isNotEmpty()) {
-            val newModules = mutableListOf<M>()
-
-            currentModules.forEach { module ->
-                when (module) {
-                    is M.General -> cycleInfos[module] = CycleInfo(1, 1)
-                    is M.FlipFlop -> {
-                        val fromCycleInfoList = module.fromConnections.mapNotNull { cycleInfos[it] }
-                        val factors = fromCycleInfoList.map { it.loopLength.factorial().groupBy { f -> f } }
-                        val factorsMap = factors.map { it.mapValues { f -> f.value.size } }
-                        val commonFactors = factorsMap.reduce { acc, map -> acc.mapValues { (k, v) -> max(v, (map[k] ?: 0)) } }
-                        val length = commonFactors.map { (k, v) -> k.toDouble().pow(v).toLong() }.reduce { acc, l -> acc * l }
-                        val signalSendsListInCommonFactor = fromCycleInfoList.map { length / it.loopLength * it.lowSignalSendInACycle }
-                        val signalSendsInCommonFactor = signalSendsListInCommonFactor.reduce { acc, l -> acc + l }
-                        val cycleInfo = when {
-                            signalSendsInCommonFactor % 2 == 0L -> CycleInfo(length, signalSendsInCommonFactor / 2)
-                            else -> CycleInfo(length * 2, signalSendsInCommonFactor)
-                        }
-                        "FlipFlop ${module.name} info: $cycleInfo".println()
-                        cycleInfos[module] = cycleInfo
-                    }
-
-                    is M.Conj -> {
-                        val fromCycleInfoList = module.fromConnections.mapNotNull { cycleInfos[it] }
-                        val length = fromCycleInfoList.map { it.loopLength }.reduce { acc, l -> acc * l }
-                        val signalSendsInACycle = 1L
-                        val cycleInfo = CycleInfo(length, signalSendsInACycle)
-                        "Conj ${module.name} info: $cycleInfo".println()
-                        cycleInfos[module] = cycleInfo
-                    }
+            while (true) {
+                nodes.add(current)
+                if (current.toConnections.count { it is M.Conj } > 0) {
+                    conjInjectingNodes.add(current)
                 }
-                newModules.addAll(module.toConnections)
+                current = current.toConnections.firstOrNull { it is M.FlipFlop } ?: break
             }
-
-            currentModules = newModules
+            return@map conjInjectingNodes.sumOf { 2.0.pow(nodes.indexOf(it)).toLong() }
         }
 
-        return 1
+        cycles.println()
+
+        val factors = mutableMapOf<Long, Int>()
+
+        cycles.map { it.factorial().groupBy { f -> f }.mapValues { (_, v) -> v.size } }.forEach { fMap ->
+            fMap.forEach { (k, v) ->
+                factors[k] = factors[k]?.takeIf { it >= v } ?: v
+            }
+        }
+
+        val lcm = factors.map { (k, v) -> k.toDouble().pow(v).toLong() }.reduce { acc, l -> acc * l }
+
+        return lcm
     }
 
     check(part1(readInput("$FOLDER/test")) == 11687500L)
@@ -187,8 +171,7 @@ fun main() {
     }
     val part2Result: Long
     val part2Time = measureNanoTime {
-//        part2Result = part2(input)
-        part2Result = part2(readInput("$FOLDER/test2"))
+        part2Result = part2(input)
     }
 
     println("Part 1 result: $part1Result")
