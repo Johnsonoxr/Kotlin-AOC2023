@@ -2,36 +2,30 @@ package day20
 
 import println
 import readInput
-import kotlin.system.exitProcess
+import kotlin.math.pow
 import kotlin.system.measureNanoTime
 
 private const val FOLDER = "day20"
 
-sealed class Module(val connections: MutableList<Module> = mutableListOf()) {
-    data class FlipFlop(val n: String, var isHigh: Boolean = false) : Module()
-    data class Conj(val n: String, val conjMap: MutableMap<String, Boolean> = mutableMapOf()) : Module()
-    data class Broadcaster(val n: String = "broadcaster") : Module()
-    data class Button(val n: String = "button") : Module()
-    data class Dummy(val n: String) : Module()
+sealed class M(var fromConnections: List<M> = emptyList(), var toConnections: List<M> = emptyList(), var state: Boolean = false) {
+    data class General(val n: String) : M()
+    data class FlipFlop(val n: String) : M()
+    data class Conj(val n: String) : M()
 
     val name: String
         get() = when (this) {
+            is General -> n
             is FlipFlop -> n
             is Conj -> n
-            is Broadcaster -> n
-            is Button -> n
-            is Dummy -> n
         }
 }
 
-data class Signal(val isHigh: Boolean, val module: Module)
-
 fun main() {
 
-    fun parseModules(input: List<String>): List<Module> {
-        val modules = mutableListOf<Module>()
-        modules.add(Module.Button())
-        modules.add(Module.Broadcaster())
+    fun parseModules(input: List<String>): List<M> {
+        val modules = mutableListOf<M>()
+        modules.add(M.General("button"))
+        modules.add(M.General("broadcaster"))
 
         fun findName(line: String): String {
             return "\\w+".toRegex().find(line)!!.value
@@ -39,31 +33,28 @@ fun main() {
 
         input.forEach { line ->
             when {
-                line.startsWith("%") -> modules.add(Module.FlipFlop(findName(line)))
-                line.startsWith("&") -> modules.add(Module.Conj(findName(line)))
+                line.startsWith("%") -> modules.add(M.FlipFlop(findName(line)))
+                line.startsWith("&") -> modules.add(M.Conj(findName(line)))
             }
         }
 
         input.forEach { line ->
-            val module = when {
-                line.startsWith("%") -> modules.first { it is Module.FlipFlop && it.n == findName(line) }
-                line.startsWith("&") -> modules.first { it is Module.Conj && it.n == findName(line) }
-                else -> modules.first { it is Module.Broadcaster }
-            }
+
+            val module = modules.first { it.name == findName(line) }
 
             val connectionNames = line.split(" -> ")[1].split(", ")
             val connections = connectionNames.map { name ->
-                modules.firstOrNull { it.name == name } ?: Module.Dummy(name).also { modules.add(it) }
+                modules.firstOrNull { it.name == name } ?: M.General(name).also { modules.add(it) }
             }
 
-            module.connections.addAll(connections)
+            module.toConnections = connections
         }
 
-        modules.filterIsInstance<Module.Conj>().forEach { conj ->
-            conj.conjMap.putAll(modules.filter { it.connections.contains(conj) }.associate { it.name to false })
+        modules.forEach { conj ->
+            conj.fromConnections = modules.filter { it.toConnections.contains(conj) }
         }
 
-        modules.first { it is Module.Button }.connections.add(modules.first { it is Module.Broadcaster })
+        modules.first { it.name == "button" }.toConnections = modules.filter { it.name == "broadcaster" }
 
         return modules
     }
@@ -72,62 +63,44 @@ fun main() {
 
         val modules = parseModules(input)
 
+        data class Signal(val isHigh: Boolean, val module: M)
+
         var signalHigh = 0
         var signalLow = 0
 
         repeat(1000) {
 
-            var signals = mutableListOf(Signal(false, modules.first { it is Module.Button }))
+            var signals = mutableListOf(Signal(false, modules.first { it.name == "button" }))
 
             while (signals.isNotEmpty()) {
                 val newSignals = mutableListOf<Signal>()
 
-                val postConjUpdates = mutableListOf<Triple<Module.Conj, String, Boolean>>()
-
                 signals.forEach { signal ->
 
-                    when (signal.module) {
-                        is Module.Button, is Module.Broadcaster, is Module.Dummy -> {
-                            val signalSending = signal.isHigh
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
-                            }
-                        }
+                    val newSignal: Boolean? = when (signal.module) {
+                        is M.General -> signal.isHigh
 
-                        is Module.FlipFlop -> {
+                        is M.FlipFlop -> {
                             if (signal.isHigh) {
-                                return@forEach
-                            }
-                            signal.module.isHigh = !signal.module.isHigh
-                            val signalSending = signal.module.isHigh
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
+                                null
+                            } else {
+                                val signalSending = !signal.module.state
+                                signal.module.state = signalSending
+                                signalSending
                             }
                         }
 
-                        is Module.Conj -> {
-                            val signalSending = !signal.module.conjMap.all { it.value }
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
-                            }
+                        is M.Conj -> {
+                            val signalSending = !signal.module.fromConnections.all { it.state }
+                            signal.module.state = signalSending
+                            signalSending
                         }
                     }
 
+                    if (newSignal != null) {
+                        newSignals.addAll(signal.module.toConnections.map { Signal(newSignal, it) })
+                    }
                 }
-
-                postConjUpdates.forEach { (conj, name, signalSending) ->
-                    conj.conjMap[name] = signalSending
-                }
-                postConjUpdates.clear()
 
                 signalHigh += newSignals.count { it.isHigh }
                 signalLow += newSignals.count { !it.isHigh }
@@ -140,194 +113,53 @@ fun main() {
     }
 
     fun part2(input: List<String>): Long {
+
+        fun Long.factorial(): List<Long> {
+            val result = mutableListOf<Long>()
+            var current = this
+            var i = 2L
+            while (current > 1) {
+                if (current % i == 0L) {
+                    result.add(i)
+                    current /= i
+                } else {
+                    i++
+                }
+            }
+            return result.takeIf { it.isNotEmpty() } ?: listOf(1)
+        }
+
         val modules = parseModules(input)
 
-        val connectionFrom = modules.associateWith { it.connections }
-        val connectionTo = modules.associateWith { modules.filter { m -> it in m.connections } }
+        val cycles = modules.first { it.name == "broadcaster" }.toConnections.map { m ->
+            var current = m
 
-        val cycle = modules.associateWith { 1L }.toMutableMap()
-        var transporting = setOf(modules.first { it is Module.Button })
+            val nodes = mutableListOf<M>()
+            val conjInjectingNodes = mutableListOf<M>()
 
-        while (transporting.isNotEmpty()) {
-
-            val nextTransporting = mutableSetOf<Module>()
-
-            transporting.forEach { m ->
-
-//                if (m in cycleMap) {
-//                    return@forEach
-//                }
-//
-//                if (connectionTo[m]!!.any { it !in cycleMap }) {
-//                    return@forEach
-//                }
-
-                connectionFrom[m]!!.forEach { nextTransporting.add(it) }
-
-                when (m) {
-                    is Module.Button, is Module.Broadcaster, is Module.Dummy -> {
-//                        cycle[m] = cycle[m]!!
-//                        cycleMap[m] = connectionTo[m]!!.map { cycleMap[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
-                    }
-
-                    is Module.FlipFlop -> {
-                        cycle[m] = 2 * connectionTo[m]!!.map { cycle[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
-//                        cycleMap[m] = 2 * connectionTo[m]!!.map { cycleMap[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
-                    }
-
-                    is Module.Conj -> {
-                        cycle[m] = connectionTo[m]!!.map { cycle[it]!! }.reduce { cycleAcc, cycleOfM -> cycleAcc * cycleOfM }
-                    }
+            while (true) {
+                nodes.add(current)
+                if (current.toConnections.count { it is M.Conj } > 0) {
+                    conjInjectingNodes.add(current)
                 }
+                current = current.toConnections.firstOrNull { it is M.FlipFlop } ?: break
+            }
+            return@map conjInjectingNodes.sumOf { 2.0.pow(nodes.indexOf(it)).toLong() }
+        }
 
+        cycles.println()
+
+        val factors = mutableMapOf<Long, Int>()
+
+        cycles.map { it.factorial().groupBy { f -> f }.mapValues { (_, v) -> v.size } }.forEach { fMap ->
+            fMap.forEach { (k, v) ->
+                factors[k] = factors[k]?.takeIf { it >= v } ?: v
             }
         }
 
-        exitProcess(0)
+        val lcm = factors.map { (k, v) -> k.toDouble().pow(v).toLong() }.reduce { acc, l -> acc * l }
 
-
-        var signalHigh = 0
-        var signalLow = 0
-
-        val rmModule = modules.first { it is Module.Conj && it.n == "rm" } as Module.Conj
-
-        fun findConjList(module: Module): List<List<Module>> {
-            return when (module) {
-                is Module.Conj -> {
-                    val conjList = module.conjMap.keys.map { key ->
-                        findConjList(modules.first { m -> m.name == key })
-                    }.flatten()
-                    conjList.map { listOf(module) + it }
-                }
-
-                else -> listOf(listOf(module))
-            }
-        }
-
-        val conjList = findConjList(modules.first { it.name == "rm" })
-
-        conjList.forEach { lst ->
-            lst.joinToString("-") { "${it::class.java.simpleName}(${it.name})" }.println()
-        }
-
-        val flipFlops = conjList.map { it.last() } as List<Module.FlipFlop>
-
-        val ffMap = flipFlops.associateWith { mutableListOf<Char>() }
-
-        var buttonPressCount = 0L
-        while (true) {
-            buttonPressCount++
-
-            if (buttonPressCount > 1e6) {
-                break
-            }
-
-            if (buttonPressCount % 1000000 == 0L) {
-                println("Button press count: $buttonPressCount")
-            }
-
-            var signals = mutableListOf(Signal(false, modules.first { it is Module.Button }))
-
-            while (signals.isNotEmpty()) {
-                val newSignals = mutableListOf<Signal>()
-
-                val postConjUpdates = mutableListOf<Triple<Module.Conj, String, Boolean>>()
-
-                signals.forEach { signal ->
-
-                    when (signal.module) {
-                        is Module.Button, is Module.Broadcaster, is Module.Dummy -> {
-                            val signalSending = signal.isHigh
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
-                            }
-                        }
-
-                        is Module.FlipFlop -> {
-                            if (signal.isHigh) {
-                                return@forEach
-                            }
-                            signal.module.isHigh = !signal.module.isHigh
-                            val signalSending = signal.module.isHigh
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
-                            }
-                        }
-
-                        is Module.Conj -> {
-                            val signalSending = !signal.module.conjMap.all { it.value }
-                            signal.module.connections.forEach {
-                                newSignals.add(Signal(signalSending, it))
-                                if (it is Module.Conj) {
-                                    postConjUpdates.add(Triple(it, signal.module.name, signalSending))
-                                }
-                            }
-                        }
-                    }
-
-                }
-
-                postConjUpdates.forEach { (conj, name, signalSending) ->
-                    conj.conjMap[name] = signalSending
-                }
-                postConjUpdates.clear()
-
-                signalHigh += newSignals.count { it.isHigh }
-                signalLow += newSignals.count { !it.isHigh }
-
-                signals = newSignals
-            }
-
-//            flipFlops.forEach { ff ->
-//                ffMap[ff.name]!!.add(if (ff.isHigh) '1' else '0')
-//            }
-
-            ffMap.entries.forEach { it.value.add(if (it.key.isHigh) '1' else '0') }
-
-            if (signals.any { !it.isHigh && it.module.name == "rx" }) {
-                break
-            }
-        }
-
-//        ffMap.entries.forEach { (ff, list) ->
-//            "Checking ${ff.name}".println()
-//            val halfList = list.takeLast(list.size / 2)
-//            var patternFound = false
-//            for (patternSize in 1..halfList.size / 2) {
-//
-//                if (patternSize % 100 == 0) {
-//                    println("Checking pattern size $patternSize")
-//                }
-//
-//                patternFound = true
-//
-//                val chunks = halfList.chunked(patternSize)
-//                val pattern = chunks.first()
-//
-//                for (chunk in chunks.drop(1)) {
-//                    if (chunk != pattern) {
-//                        patternFound = false
-//                        break
-//                    }
-//                }
-//
-//                if (patternFound) {
-//                    println("Pattern found for ${ff.name}: $patternSize")
-//                    break
-//                }
-//            }
-//            if (!patternFound) {
-//                println("No pattern found for ${ff.name}")
-//            }
-//        }
-
-        return buttonPressCount
+        return lcm
     }
 
     check(part1(readInput("$FOLDER/test")) == 11687500L)
