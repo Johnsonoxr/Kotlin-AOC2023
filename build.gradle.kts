@@ -10,7 +10,7 @@ repositories {
 }
 
 dependencies {
-    implementation ("com.github.johnsonoxr:exnumber:1.0.3")
+    implementation ("com.github.johnsonoxr:exnumber:v1.0.4")
 }
 
 sourceSets {
